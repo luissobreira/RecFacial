@@ -136,7 +136,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-APP_VERSION = "v3.2.0"
+APP_VERSION = "v3.4.0"
 
 # Top Bar com Botão de Reset e Badge de Versão
 col_head1, col_head2 = st.columns([3, 1])
@@ -175,8 +175,8 @@ with st.sidebar:
         }[x],
         index=1
     )
-    sample_rate = st.slider("Amostragem de Frames em Vídeo:", 2, 15, 6, help="Processa 1 frame a cada N frames do vídeo.")
-    min_blur = st.slider("Filtro Anti-Desfoque (Nitidez Mínima):", 10, 100, 35, help="Filtra e ignora rostos desfocados no vídeo.")
+    sample_rate = st.slider("Amostragem de Frames em Vídeo:", 1, 10, 2, help="Processa 1 frame a cada N frames do vídeo.")
+    min_blur = st.slider("Filtro Anti-Desfoque (Nitidez Mínima):", 1, 50, 8, help="Filtra e ignora rostos desfocados no vídeo.")
 
 # Seção de Upload com Ícones de Mídia Enviada
 key_suffix = st.session_state['uploader_key']
@@ -263,8 +263,8 @@ if uploaded_a and uploaded_b:
             elif len(video_persons) == 0:
                 st.warning("Nenhum rosto com qualidade suficiente foi detectado no vídeo.")
             else:
-                # Filtrar SOMENTE os rostos com status COMPATÍVEL (MATCH)
-                compatible_persons = [p for p in video_persons if p['metrics']['status_code'] == 'MATCH']
+                # Filtrar rostos com status COMPATÍVEL ou INCONCLUSIVO significativo (Cosseno >= 0.45 / Certeza >= 50%)
+                compatible_persons = [p for p in video_persons if (p['metrics']['status_code'] in ['MATCH', 'INCONCLUSIVE'] or p['metrics']['cosine_sim'] >= 0.45)]
                 
                 if len(compatible_persons) == 0:
                     st.warning("⚠️ NENHUM ROSTO COMPATÍVEL ENCONTRADO NO VÍDEO.")

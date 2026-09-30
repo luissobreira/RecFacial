@@ -124,7 +124,7 @@ def generate_pdf_report(
     story.append(Paragraph("1. REGISTRO FOTOGRÁFICO E RECORTE BIOMÉTRICO", section_style))
 
     if video_persons is not None:
-        compatible_persons = [p for p in video_persons if p['metrics']['status_code'] == 'MATCH']
+        compatible_persons = [p for p in video_persons if (p['metrics']['status_code'] in ['MATCH', 'INCONCLUSIVE'] or p['metrics']['cosine_sim'] >= 0.45)]
         
         img_a_rl = pil_to_rl_image(crop_a_pil if crop_a_pil else img_a_pil, 120, 120)
         ref_table = Table([

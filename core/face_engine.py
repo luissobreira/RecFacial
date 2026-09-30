@@ -18,9 +18,9 @@ def get_models():
     if _mtcnn is None:
         _mtcnn = MTCNN(
             image_size=160,
-            margin=20,
-            min_face_size=30,
-            thresholds=[0.7, 0.8, 0.85],
+            margin=14, # Margem de 14px para alinhamento ideal FaceNet (VGGFace2)
+            min_face_size=15, # Permitir rostos menores em vídeos de CFTV
+            thresholds=[0.5, 0.6, 0.6], # Limiares mais sensíveis para vídeo
             factor=0.709,
             post_process=True,
             keep_all=True,
@@ -114,29 +114,32 @@ def draw_futuristic_hud(img_pil, box, lmk, label="SUSPECT", is_match=True):
 
 def get_enhanced_face_embedding(crop_pil):
     """
-    Calcula embedding de alta precisão com amostragem multi-crop e espelhamento (Flip Invariance).
-    Minimiza erros causados por variações de pose, iluminação e ângulo.
+    Calcula embedding de alta precisão com amostragem multi-crop (justo + médio) e espelhamento (Flip Invariance).
     """
     _, resnet = get_models()
     
-    # 1. Imagem Direta
+    # Crop 1: Enquadramento Justo (160x160)
     img_orig = crop_pil.resize((160, 160))
-    arr_orig = np.array(img_orig).astype(np.float32) / 255.0
-    arr_orig = (arr_orig - 0.5) / 0.5
+    arr_orig = (np.array(img_orig).astype(np.float32) / 255.0 - 0.5) / 0.5
     tensor_orig = torch.tensor(arr_orig).permute(2, 0, 1).unsqueeze(0).to(device)
     
-    # 2. Imagem Espelhada Horizontais (Horizontal Flip para pose invariance)
+    # Flip Horizontal
     img_flip = ImageOps.mirror(img_orig)
-    arr_flip = np.array(img_flip).astype(np.float32) / 255.0
-    arr_flip = (arr_flip - 0.5) / 0.5
+    arr_flip = (np.array(img_flip).astype(np.float32) / 255.0 - 0.5) / 0.5
     tensor_flip = torch.tensor(arr_flip).permute(2, 0, 1).unsqueeze(0).to(device)
     
+    # Crop 2: Leve Zoom Interno (Tighter Crop)
+    w, h = crop_pil.size
+    crop_inner = crop_pil.crop((int(w * 0.05), int(h * 0.05), int(w * 0.95), int(h * 0.95))).resize((160, 160))
+    arr_inner = (np.array(crop_inner).astype(np.float32) / 255.0 - 0.5) / 0.5
+    tensor_inner = torch.tensor(arr_inner).permute(2, 0, 1).unsqueeze(0).to(device)
+
     with torch.no_grad():
         emb_orig = resnet(tensor_orig).squeeze().cpu().numpy()
         emb_flip = resnet(tensor_flip).squeeze().cpu().numpy()
+        emb_inner = resnet(tensor_inner).squeeze().cpu().numpy()
         
-    # Média dos vetores original e espelhado
-    combined_emb = (emb_orig + emb_flip) / 2.0
+    combined_emb = (emb_orig * 0.45 + emb_flip * 0.35 + emb_inner * 0.20)
     
     norm = np.linalg.norm(combined_emb)
     if norm > 0:
@@ -170,7 +173,7 @@ def process_face_image(img_pil, label="SUBJECT", is_match=True):
         
     boxes, probs, landmarks = mtcnn.detect(img_pil, landmarks=True)
     
-    if boxes is None or len(boxes) == 0 or probs[0] is None or probs[0] < 0.75:
+    if boxes is None or len(boxes) == 0 or probs[0] is None or probs[0] < 0.50:
         return None, None, None, None, None, "Nenhum rosto detectado com confiança suficiente."
         
     box = boxes[0].astype(int)
@@ -180,7 +183,7 @@ def process_face_image(img_pil, label="SUBJECT", is_match=True):
     x1, y1, x2, y2 = max(0, box[0]), max(0, box[1]), min(width, box[2]), min(height, box[3])
     
     w_box, h_box = x2 - x1, y2 - y1
-    pad_x, pad_y = int(w_box * 0.25), int(h_box * 0.25)
+    pad_x, pad_y = int(w_box * 0.12), int(h_box * 0.12)
     crop_box = (max(0, x1 - pad_x), max(0, y1 - pad_y), min(width, x2 + pad_x), min(height, y2 + pad_y))
     
     crop_pil = img_pil.crop(crop_box).resize((160, 160))
@@ -203,7 +206,6 @@ def process_face_image(img_pil, label="SUBJECT", is_match=True):
     face_crop_hud = draw_futuristic_hud(crop_base, box_rel, lmk_rel, label=label, is_match=is_match)
     landmarks_img = draw_futuristic_hud(img_pil.copy(), box, lmk, label=label, is_match=is_match)
     
-    # Gerar embedding aprimorado com multi-crop flip-invariance
     emb, tensor = get_enhanced_face_embedding(crop_pil)
     
     return tensor, face_crop_hud, landmarks_img, box, lmk, None
@@ -228,10 +230,11 @@ def compare_embeddings(emb1, emb2, threshold_mode='padrao'):
 
     certainty_pct = calculate_certainty(cosine_sim)
     
+    # Limiares de rigidez para confronto
     thresholds = {
-        'rigoroso': {'match_sim': 0.68, 'inconclusive_sim': 0.55},
-        'padrao':   {'match_sim': 0.60, 'inconclusive_sim': 0.48},
-        'permissivo': {'match_sim': 0.52, 'inconclusive_sim': 0.42}
+        'rigoroso': {'match_sim': 0.65, 'inconclusive_sim': 0.50},
+        'padrao':   {'match_sim': 0.55, 'inconclusive_sim': 0.45},
+        'permissivo': {'match_sim': 0.48, 'inconclusive_sim': 0.40}
     }
     
     t = thresholds.get(threshold_mode, thresholds['padrao'])
@@ -262,8 +265,13 @@ def compare_embeddings(emb1, emb2, threshold_mode='padrao'):
         'reason': reason
     }
 
-def process_video_file(video_bytes_or_path, emb_ref, sample_fps_step=6, threshold_mode='padrao', min_blur_score=35.0, progress_callback=None):
-    """Processa arquivo de vídeo com extração de alta precisão."""
+def process_video_file(video_bytes_or_path, emb_ref, sample_fps_step=2, threshold_mode='padrao', min_blur_score=5.0, progress_callback=None):
+    """
+    Processa arquivo de vídeo com sensibilidade calibrada para evitar falsos negativos:
+    - Amostragem a cada 2 frames para capturar todos os momentos em movimento.
+    - Confiança MTCNN >= 0.50 para detectar rostos de perfil ou baixa luminosidade.
+    - Tolerância de nitidez de 5.0 (adequado para vídeos comprimidos de CFTV / WhatsApp).
+    """
     mtcnn, _ = get_models()
     
     if isinstance(video_bytes_or_path, (bytes, bytearray)):
@@ -300,7 +308,7 @@ def process_video_file(video_bytes_or_path, emb_ref, sample_fps_step=6, threshol
             pct = min(1.0, float(frame_count) / float(total_frames))
             progress_callback(pct)
             
-        if frame_count % sample_fps_step != 0:
+        if sample_fps_step > 1 and (frame_count % sample_fps_step != 0):
             continue
             
         timestamp_sec = frame_count / fps
@@ -312,7 +320,7 @@ def process_video_file(video_bytes_or_path, emb_ref, sample_fps_step=6, threshol
             continue
             
         for i, box in enumerate(boxes):
-            if probs[i] is None or probs[i] < 0.85:
+            if probs[i] is None or probs[i] < 0.50:
                 continue
                 
             box_int = box.astype(int)
@@ -320,16 +328,16 @@ def process_video_file(video_bytes_or_path, emb_ref, sample_fps_step=6, threshol
             
             left_eye, right_eye = lmk_int[0], lmk_int[1]
             interpupillary_dist = np.linalg.norm(left_eye - right_eye)
-            if interpupillary_dist < 14:
+            if interpupillary_dist < 6: # Mínimo de 6 pixels para quadros de vídeo
                 continue
                 
             w_img, h_img = img_pil.size
             x1, y1, x2, y2 = max(0, box_int[0]), max(0, box_int[1]), min(w_img, box_int[2]), min(h_img, box_int[3])
             bw, bh = x2 - x1, y2 - y1
-            if bw < 25 or bh < 25:
+            if bw < 14 or bh < 14:
                 continue
                 
-            pad_x, pad_y = int(bw * 0.25), int(bh * 0.25)
+            pad_x, pad_y = int(bw * 0.12), int(bh * 0.12)
             crop_box = (max(0, x1 - pad_x), max(0, y1 - pad_y), min(w_img, x2 + pad_x), min(h_img, y2 + pad_y))
             crop_pil = img_pil.crop(crop_box)
             
@@ -363,14 +371,14 @@ def process_video_file(video_bytes_or_path, emb_ref, sample_fps_step=6, threshol
         progress_callback(1.0)
 
     if len(raw_detections) == 0:
-        return [], "Nenhum rosto com qualidade suficiente (nítido e visível) foi detectado no vídeo."
+        return [], "Nenhum rosto com qualidade suficiente foi detectado no vídeo."
 
     clusters = []
     for det in raw_detections:
         matched_cluster = None
         for cl in clusters:
             sim = np.dot(det['embedding'], cl['representative_emb'])
-            if sim >= 0.70:
+            if sim >= 0.65:
                 matched_cluster = cl
                 break
                 
