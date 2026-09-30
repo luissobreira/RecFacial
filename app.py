@@ -138,7 +138,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-APP_VERSION = "v3.5.0"
+APP_VERSION = "v3.5.1"
 
 # Top Bar com Botão de Reset e Badge de Versão
 col_head1, col_head2 = st.columns([3, 1])
@@ -337,49 +337,49 @@ if uploaded_a and uploaded_b:
                                 """, unsafe_allow_html=True)
 
                     selected_person = compatible_persons[0] # Maior match compatível
-                    res = selected_person['metrics']
-                    
                     # 2. ANÁLISE BIOMÉTRICA E MÉTRICAS
                     st.markdown('<div class="clean-section-title">2. ANÁLISE BIOMÉTRICA E MÉTRICAS DE CONVERGÊNCIA</div>', unsafe_allow_html=True)
                     
-                    color_hex = res['color']
-                    certainty_str = f"{res['certainty_pct']:.1f}%"
-                    status_html = f"<b style='color: {color_hex}; font-size: 14px;'>{res['classification']}</b>"
-                    certainty_html = f"<b style='color: {color_hex}; font-size: 14px;'>{certainty_str}</b>"
+                    for p in compatible_persons:
+                        res = p['metrics']
+                        color_hex = res['color']
+                        certainty_str = f"{res['certainty_pct']:.1f}%"
+                        status_html = f"<b style='color: {color_hex}; font-size: 14px;'>{res['classification']}</b>"
+                        certainty_html = f"<b style='color: {color_hex}; font-size: 14px;'>{certainty_str}</b>"
 
-                    table_html = f"""
-                    <table class="minimal-table">
-                        <tr>
-                            <td class="col-label">Indivíduo Analisado:</td>
-                            <td><b>{selected_person['person_id']}</b> ({selected_person['timestamp_str']})</td>
-                        </tr>
-                        <tr>
-                            <td class="col-label">Algoritmo Extrator:</td>
-                            <td>Deep FaceNet (InceptionResnetV1 512d - VGGFace2)</td>
-                        </tr>
-                        <tr>
-                            <td class="col-label">Similaridade de Cosseno:</td>
-                            <td><b>{res['cosine_sim']:.4f}</b></td>
-                        </tr>
-                        <tr>
-                            <td class="col-label">Distância Euclidiana (L2):</td>
-                            <td><b>{res['euclidean_dist']:.4f}</b></td>
-                        </tr>
-                        <tr>
-                            <td class="col-label">Grau de Certeza Estima:</td>
-                            <td>{certainty_html}</td>
-                        </tr>
-                        <tr>
-                            <td class="col-label">Resultado da Análise:</td>
-                            <td>{status_html}</td>
-                        </tr>
-                        <tr>
-                            <td class="col-label">Fundamentação:</td>
-                            <td>{res['reason']}</td>
-                        </tr>
-                    </table>
-                    """
-                    st.markdown(table_html, unsafe_allow_html=True)
+                        table_html = f"""
+                        <table class="minimal-table" style="margin-bottom: 12px;">
+                            <tr>
+                                <td class="col-label">Indivíduo Analisado:</td>
+                                <td><b>{p['person_id']}</b> ({p['timestamp_str']})</td>
+                            </tr>
+                            <tr>
+                                <td class="col-label">Algoritmo Extrator:</td>
+                                <td>Deep FaceNet (InceptionResnetV1 512d - VGGFace2 com Multi-crop)</td>
+                            </tr>
+                            <tr>
+                                <td class="col-label">Similaridade de Cosseno:</td>
+                                <td><b>{res['cosine_sim']:.4f}</b></td>
+                            </tr>
+                            <tr>
+                                <td class="col-label">Distância Euclidiana (L2):</td>
+                                <td><b>{res['euclidean_dist']:.4f}</b></td>
+                            </tr>
+                            <tr>
+                                <td class="col-label">Grau de Certeza Estimado:</td>
+                                <td>{certainty_html}</td>
+                            </tr>
+                            <tr>
+                                <td class="col-label">Resultado da Análise:</td>
+                                <td>{status_html}</td>
+                            </tr>
+                            <tr>
+                                <td class="col-label">Fundamentação:</td>
+                                <td>{res['reason']}</td>
+                            </tr>
+                        </table>
+                        """
+                        st.markdown(table_html, unsafe_allow_html=True)
 
                     # 3. PARECER TÉCNICO
                     st.markdown('<div class="clean-section-title">3. PARECER TÉCNICO PERICIAL / OBSERVAÇÕES</div>', unsafe_allow_html=True)
@@ -519,44 +519,46 @@ if uploaded_a and uploaded_b:
                     # 2. ANÁLISE BIOMÉTRICA E MÉTRICAS
                     st.markdown('<div class="clean-section-title">2. ANÁLISE BIOMÉTRICA E MÉTRICAS DE CONVERGÊNCIA</div>', unsafe_allow_html=True)
                     
-                    color_hex = res['color']
-                    certainty_str = f"{res['certainty_pct']:.1f}%"
-                    status_html = f"<b style='color: {color_hex}; font-size: 15px;'>{res['classification']}</b>"
-                    certainty_html = f"<b style='color: {color_hex}; font-size: 15px;'>{certainty_str}</b>"
+                    for idx, pair in enumerate(matched_pairs, 1):
+                        p_res = pair['metrics']
+                        color_hex = p_res['color']
+                        certainty_str = f"{p_res['certainty_pct']:.1f}%"
+                        status_html = f"<b style='color: {color_hex}; font-size: 15px;'>{p_res['classification']}</b>"
+                        certainty_html = f"<b style='color: {color_hex}; font-size: 15px;'>{certainty_str}</b>"
 
-                    table_html = f"""
-                    <table class="minimal-table">
-                        <tr>
-                            <td class="col-label">Par de Maior Convergência:</td>
-                            <td><b>{primary_pair['face_a']['label']}</b> (Foto A) ↔ <b>{primary_pair['face_b']['label']}</b> (Foto B)</td>
-                        </tr>
-                        <tr>
-                            <td class="col-label">Algoritmo Extrator:</td>
-                            <td>Deep FaceNet (InceptionResnetV1 512d - VGGFace2) com Multi-crop</td>
-                        </tr>
-                        <tr>
-                            <td class="col-label">Similaridade de Cosseno:</td>
-                            <td><b>{res['cosine_sim']:.4f}</b></td>
-                        </tr>
-                        <tr>
-                            <td class="col-label">Distância Euclidiana (L2):</td>
-                            <td><b>{res['euclidean_dist']:.4f}</b></td>
-                        </tr>
-                        <tr>
-                            <td class="col-label">Grau de Certeza Estima:</td>
-                            <td>{certainty_html}</td>
-                        </tr>
-                        <tr>
-                            <td class="col-label">Resultado da Análise:</td>
-                            <td>{status_html}</td>
-                        </tr>
-                        <tr>
-                            <td class="col-label">Fundamentação:</td>
-                            <td>{res['reason']}</td>
-                        </tr>
-                    </table>
-                    """
-                    st.markdown(table_html, unsafe_allow_html=True)
+                        table_html = f"""
+                        <table class="minimal-table" style="margin-bottom: 12px;">
+                            <tr>
+                                <td class="col-label">Par Biométrico Analisado:</td>
+                                <td><b>PAR #{idx}: {pair['face_a']['label']}</b> (Foto A) ↔ <b>{pair['face_b']['label']}</b> (Foto B)</td>
+                            </tr>
+                            <tr>
+                                <td class="col-label">Algoritmo Extrator:</td>
+                                <td>Deep FaceNet (InceptionResnetV1 512d - VGGFace2 com Multi-crop)</td>
+                            </tr>
+                            <tr>
+                                <td class="col-label">Similaridade de Cosseno:</td>
+                                <td><b>{p_res['cosine_sim']:.4f}</b></td>
+                            </tr>
+                            <tr>
+                                <td class="col-label">Distância Euclidiana (L2):</td>
+                                <td><b>{p_res['euclidean_dist']:.4f}</b></td>
+                            </tr>
+                            <tr>
+                                <td class="col-label">Grau de Certeza Estimado:</td>
+                                <td>{certainty_html}</td>
+                            </tr>
+                            <tr>
+                                <td class="col-label">Resultado da Análise:</td>
+                                <td>{status_html}</td>
+                            </tr>
+                            <tr>
+                                <td class="col-label">Fundamentação:</td>
+                                <td>{p_res['reason']}</td>
+                            </tr>
+                        </table>
+                        """
+                        st.markdown(table_html, unsafe_allow_html=True)
 
                     # 3. PARECER TÉCNICO
                     st.markdown('<div class="clean-section-title">3. PARECER TÉCNICO PERICIAL / OBSERVAÇÕES</div>', unsafe_allow_html=True)

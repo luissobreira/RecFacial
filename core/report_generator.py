@@ -256,28 +256,84 @@ def generate_pdf_report(
     # 2. ANÁLISE BIOMÉTRICA E MÉTRICAS
     story.append(Paragraph("2. ANÁLISE BIOMÉTRICA E MÉTRICAS DE CONVERGÊNCIA", section_style))
 
-    res_color = colors.HexColor(metrics['color'])
-    status_text = f"<b><font size=11 color='{metrics['color']}'>{metrics['classification']}</font></b>"
+    if matched_pairs is not None and len(matched_pairs) > 0:
+        for idx, pair in enumerate(matched_pairs, 1):
+            m = pair['metrics']
+            status_text = f"<b><font size=11 color='{m['color']}'>{m['classification']}</font></b>"
 
-    metrics_table_data = [
-        [Paragraph("<b>Algoritmo Extrator:</b>", body_style), Paragraph("Deep FaceNet (InceptionResnetV1 512d - VGGFace2 com Multi-crop)", body_style)],
-        [Paragraph("<b>Similaridade de Cosseno:</b>", body_style), Paragraph(f"<b>{metrics['cosine_sim']:.4f}</b>", body_style)],
-        [Paragraph("<b>Distância Euclidiana (L2):</b>", body_style), Paragraph(f"<b>{metrics['euclidean_dist']:.4f}</b>", body_style)],
-        [Paragraph("<b>Grau de Certeza Estimado:</b>", body_style), Paragraph(f"<b><font size=10 color='{metrics['color']}'>{metrics['certainty_pct']:.1f}%</font></b>", body_style)],
-        [Paragraph("<b>Resultado da Análise:</b>", body_style), Paragraph(status_text, body_style)],
-        [Paragraph("<b>Fundamentação:</b>", body_style), Paragraph(metrics['reason'], body_style)],
-    ]
+            metrics_table_data = [
+                [Paragraph("<b>Par Biométrico Analisado:</b>", body_style), Paragraph(f"<b>PAR #{idx}: {pair['face_a']['label']} (Foto A) ↔ {pair['face_b']['label']} (Foto B)</b>", body_style)],
+                [Paragraph("<b>Algoritmo Extrator:</b>", body_style), Paragraph("Deep FaceNet (InceptionResnetV1 512d - VGGFace2 com Multi-crop)", body_style)],
+                [Paragraph("<b>Similaridade de Cosseno:</b>", body_style), Paragraph(f"<b>{m['cosine_sim']:.4f}</b>", body_style)],
+                [Paragraph("<b>Distância Euclidiana (L2):</b>", body_style), Paragraph(f"<b>{m['euclidean_dist']:.4f}</b>", body_style)],
+                [Paragraph("<b>Grau de Certeza Estimado:</b>", body_style), Paragraph(f"<b><font size=10 color='{m['color']}'>{m['certainty_pct']:.1f}%</font></b>", body_style)],
+                [Paragraph("<b>Resultado da Análise:</b>", body_style), Paragraph(status_text, body_style)],
+                [Paragraph("<b>Fundamentação:</b>", body_style), Paragraph(m['reason'], body_style)],
+            ]
 
-    t_metrics = Table(metrics_table_data, colWidths=[180, 360])
-    t_metrics.setStyle(TableStyle([
-        ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#ffffff')),
-        ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e0')),
-        ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
-        ('TOPPADDING', (0, 0), (-1, -1), 4),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
-    ]))
-    story.append(t_metrics)
-    story.append(Spacer(1, 10))
+            t_metrics = Table(metrics_table_data, colWidths=[180, 360])
+            t_metrics.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#ffffff')),
+                ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e0')),
+                ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+                ('TOPPADDING', (0, 0), (-1, -1), 4),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ]))
+            story.append(t_metrics)
+            story.append(Spacer(1, 8))
+
+    elif video_persons is not None and len(video_persons) > 0:
+        compatible_persons_list = [p for p in video_persons if (p['metrics']['status_code'] in ['MATCH', 'INCONCLUSIVE'] or p['metrics']['cosine_sim'] >= 0.45)]
+        target_list = compatible_persons_list if len(compatible_persons_list) > 0 else video_persons
+        
+        for p in target_list:
+            m = p['metrics']
+            status_text = f"<b><font size=11 color='{m['color']}'>{m['classification']}</font></b>"
+
+            metrics_table_data = [
+                [Paragraph("<b>Indivíduo Analisado:</b>", body_style), Paragraph(f"<b>{p['person_id']}</b> ({p['timestamp_str']})", body_style)],
+                [Paragraph("<b>Algoritmo Extrator:</b>", body_style), Paragraph("Deep FaceNet (InceptionResnetV1 512d - VGGFace2 com Multi-crop)", body_style)],
+                [Paragraph("<b>Similaridade de Cosseno:</b>", body_style), Paragraph(f"<b>{m['cosine_sim']:.4f}</b>", body_style)],
+                [Paragraph("<b>Distância Euclidiana (L2):</b>", body_style), Paragraph(f"<b>{m['euclidean_dist']:.4f}</b>", body_style)],
+                [Paragraph("<b>Grau de Certeza Estimado:</b>", body_style), Paragraph(f"<b><font size=10 color='{m['color']}'>{m['certainty_pct']:.1f}%</font></b>", body_style)],
+                [Paragraph("<b>Resultado da Análise:</b>", body_style), Paragraph(status_text, body_style)],
+                [Paragraph("<b>Fundamentação:</b>", body_style), Paragraph(m['reason'], body_style)],
+            ]
+
+            t_metrics = Table(metrics_table_data, colWidths=[180, 360])
+            t_metrics.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#ffffff')),
+                ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e0')),
+                ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+                ('TOPPADDING', (0, 0), (-1, -1), 4),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+            ]))
+            story.append(t_metrics)
+            story.append(Spacer(1, 8))
+
+    else:
+        res_color = colors.HexColor(metrics['color'])
+        status_text = f"<b><font size=11 color='{metrics['color']}'>{metrics['classification']}</font></b>"
+
+        metrics_table_data = [
+            [Paragraph("<b>Algoritmo Extrator:</b>", body_style), Paragraph("Deep FaceNet (InceptionResnetV1 512d - VGGFace2 com Multi-crop)", body_style)],
+            [Paragraph("<b>Similaridade de Cosseno:</b>", body_style), Paragraph(f"<b>{metrics['cosine_sim']:.4f}</b>", body_style)],
+            [Paragraph("<b>Distância Euclidiana (L2):</b>", body_style), Paragraph(f"<b>{metrics['euclidean_dist']:.4f}</b>", body_style)],
+            [Paragraph("<b>Grau de Certeza Estimado:</b>", body_style), Paragraph(f"<b><font size=10 color='{metrics['color']}'>{metrics['certainty_pct']:.1f}%</font></b>", body_style)],
+            [Paragraph("<b>Resultado da Análise:</b>", body_style), Paragraph(status_text, body_style)],
+            [Paragraph("<b>Fundamentação:</b>", body_style), Paragraph(metrics['reason'], body_style)],
+        ]
+
+        t_metrics = Table(metrics_table_data, colWidths=[180, 360])
+        t_metrics.setStyle(TableStyle([
+            ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#ffffff')),
+            ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e0')),
+            ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+            ('TOPPADDING', (0, 0), (-1, -1), 4),
+            ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+        ]))
+        story.append(t_metrics)
+        story.append(Spacer(1, 10))
 
     # 3. PARECER TÉCNICO E RECURSOS TÉCNICOS UTILIZADOS
     story.append(Paragraph("3. PARECER TÉCNICO PERICIAL / OBSERVAÇÕES", section_style))
