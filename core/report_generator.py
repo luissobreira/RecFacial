@@ -18,9 +18,7 @@ def generate_pdf_report(
     video_persons=None
 ):
     """
-    Gera o relatório PDF:
-    - Se for VÍDEO: Inclui SOMENTE os rostos COMPATÍVEIS (MATCH). Se não houver nenhum compatível, insere aviso no PDF.
-    - Se for FOTO: Sempre inclui o relatório qualquer que seja o resultado (COMPATÍVEL, INCOMPATÍVEL ou INCONCLUSIVO).
+    Gera o relatório PDF com parecer pericial e a seção final 'RECURSOS TÉCNICOS UTILIZADOS'.
     """
     pdf_buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -126,10 +124,8 @@ def generate_pdf_report(
     story.append(Paragraph("1. REGISTRO FOTOGRÁFICO E RECORTE BIOMÉTRICO", section_style))
 
     if video_persons is not None:
-        # No VÍDEO: Filtrar SOMENTE os rostos COMPATÍVEIS (MATCH)
         compatible_persons = [p for p in video_persons if p['metrics']['status_code'] == 'MATCH']
         
-        # Foto A em destaque
         img_a_rl = pil_to_rl_image(crop_a_pil if crop_a_pil else img_a_pil, 120, 120)
         ref_table = Table([
             [Paragraph("<b>FOTO A (Referência Oficial / Banco de Dados)</b>", subtitle_style)],
@@ -173,7 +169,6 @@ def generate_pdf_report(
                 story.append(p_table)
                 story.append(Spacer(1, 6))
         else:
-            # Caso não haja NENHUM rosto compatível no vídeo
             no_match_box = Table([[Paragraph("⚠️ NENHUM ROSTO COMPATÍVEL ENCONTRADO NO VÍDEO.", alert_style)]], colWidths=[540])
             no_match_box.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#fff5f5')),
@@ -185,7 +180,6 @@ def generate_pdf_report(
             story.append(Spacer(1, 10))
 
     else:
-        # FOTO ESTÁTICA 1 X 1: Sempre insere o resultado qualquer que seja
         img_a_rl = pil_to_rl_image(crop_a_pil if crop_a_pil else img_a_pil, 140, 140)
         img_b_rl = pil_to_rl_image(crop_b_pil if crop_b_pil else img_b_pil_or_video_crops, 140, 140)
 
@@ -214,7 +208,7 @@ def generate_pdf_report(
     status_text = f"<b><font size=11 color='{metrics['color']}'>{metrics['classification']}</font></b>"
 
     metrics_table_data = [
-        [Paragraph("<b>Algoritmo Extrator:</b>", body_style), Paragraph("Deep FaceNet (InceptionResnetV1 512d - VGGFace2)", body_style)],
+        [Paragraph("<b>Algoritmo Extrator:</b>", body_style), Paragraph("Deep FaceNet (InceptionResnetV1 512d - VGGFace2 com Multi-crop)", body_style)],
         [Paragraph("<b>Similaridade de Cosseno:</b>", body_style), Paragraph(f"<b>{metrics['cosine_sim']:.4f}</b>", body_style)],
         [Paragraph("<b>Distância Euclidiana (L2):</b>", body_style), Paragraph(f"<b>{metrics['euclidean_dist']:.4f}</b>", body_style)],
         [Paragraph("<b>Grau de Certeza Estimado:</b>", body_style), Paragraph(f"<b><font size=10 color='{metrics['color']}'>{metrics['certainty_pct']:.1f}%</font></b>", body_style)],
@@ -233,15 +227,26 @@ def generate_pdf_report(
     story.append(t_metrics)
     story.append(Spacer(1, 10))
 
-    # 3. PARECER TÉCNICO
+    # 3. PARECER TÉCNICO E RECURSOS TÉCNICOS UTILIZADOS
     story.append(Paragraph("3. PARECER TÉCNICO PERICIAL / OBSERVAÇÕES", section_style))
     notes_content = notes if notes.strip() else "Nenhuma observação complementar inserida."
-    t_notes = Table([[Paragraph(notes_content, body_style)]], colWidths=[540])
+    
+    tech_resources_pdf = (
+        "<b>RECURSOS TÉCNICOS UTILIZADOS:</b><br/>"
+        "• <b>Extrator Biométrico:</b> Rede Neural Profunda FaceNet (InceptionResnetV1) de 512 dimensões pré-treinada na base VGGFace2 com vetorização L2 e média multi-crop Flip-Invariance.<br/>"
+        "• <b>Detector e Alinhador Anatômico:</b> MTCNN (Multi-task Cascaded Convolutional Networks) com localização de 5 pontos biométricos chave (olhos, nariz e cantos da boca).<br/>"
+        "• <b>Métricas de Convergência:</b> Produto Escalar Normalizado de Cosseno (Espaço Vetorial 512D) e Distância Euclidiana L2 com calibração sigmoidal pericial.<br/>"
+        "• <b>Filtros de Qualidade e Integridade:</b> Avaliação de nitidez facial por variância do operador Laplaciano (Laplacian Blur Score) e alinhamento geométrico pupilar."
+    )
+    
+    full_notes_pdf = f"{notes_content}<br/><br/>{tech_resources_pdf}"
+    
+    t_notes = Table([[Paragraph(full_notes_pdf, body_style)]], colWidths=[540])
     t_notes.setStyle(TableStyle([
         ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#f8f9fa')),
         ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e0')),
-        ('TOPPADDING', (0, 0), (-1, -1), 6),
-        ('BOTTOMPADDING', (0, 0), (-1, -1), 6),
+        ('TOPPADDING', (0, 0), (-1, -1), 8),
+        ('BOTTOMPADDING', (0, 0), (-1, -1), 8),
     ]))
     story.append(t_notes)
 

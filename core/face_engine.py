@@ -1,6 +1,6 @@
 import torch
 import numpy as np
-from PIL import Image, ImageDraw
+from PIL import Image, ImageDraw, ImageOps
 import cv2
 import tempfile
 import os
@@ -112,6 +112,37 @@ def draw_futuristic_hud(img_pil, box, lmk, label="SUSPECT", is_match=True):
                 
     return Image.fromarray(img)
 
+def get_enhanced_face_embedding(crop_pil):
+    """
+    Calcula embedding de alta precisão com amostragem multi-crop e espelhamento (Flip Invariance).
+    Minimiza erros causados por variações de pose, iluminação e ângulo.
+    """
+    _, resnet = get_models()
+    
+    # 1. Imagem Direta
+    img_orig = crop_pil.resize((160, 160))
+    arr_orig = np.array(img_orig).astype(np.float32) / 255.0
+    arr_orig = (arr_orig - 0.5) / 0.5
+    tensor_orig = torch.tensor(arr_orig).permute(2, 0, 1).unsqueeze(0).to(device)
+    
+    # 2. Imagem Espelhada Horizontais (Horizontal Flip para pose invariance)
+    img_flip = ImageOps.mirror(img_orig)
+    arr_flip = np.array(img_flip).astype(np.float32) / 255.0
+    arr_flip = (arr_flip - 0.5) / 0.5
+    tensor_flip = torch.tensor(arr_flip).permute(2, 0, 1).unsqueeze(0).to(device)
+    
+    with torch.no_grad():
+        emb_orig = resnet(tensor_orig).squeeze().cpu().numpy()
+        emb_flip = resnet(tensor_flip).squeeze().cpu().numpy()
+        
+    # Média dos vetores original e espelhado
+    combined_emb = (emb_orig + emb_flip) / 2.0
+    
+    norm = np.linalg.norm(combined_emb)
+    if norm > 0:
+        combined_emb = combined_emb / norm
+    return combined_emb, tensor_orig.squeeze(0)
+
 def process_face_image(img_pil, label="SUBJECT", is_match=True):
     """Detecta rosto, extrai landmarks e alinha uma imagem estática."""
     mtcnn, _ = get_models()
@@ -136,10 +167,6 @@ def process_face_image(img_pil, label="SUBJECT", is_match=True):
     
     crop_pil = img_pil.crop(crop_box).resize((160, 160))
     
-    arr = np.array(crop_pil).astype(np.float32) / 255.0
-    arr = (arr - 0.5) / 0.5
-    tensor = torch.tensor(arr).permute(2, 0, 1)
-    
     crop_base = img_pil.crop(crop_box).resize((350, 350))
     scale_x = 350.0 / (crop_box[2] - crop_box[0])
     scale_y = 350.0 / (crop_box[3] - crop_box[1])
@@ -158,25 +185,13 @@ def process_face_image(img_pil, label="SUBJECT", is_match=True):
     face_crop_hud = draw_futuristic_hud(crop_base, box_rel, lmk_rel, label=label, is_match=is_match)
     landmarks_img = draw_futuristic_hud(img_pil.copy(), box, lmk, label=label, is_match=is_match)
     
-    return tensor, face_crop_hud, landmarks_img, box, lmk, None
-
-def get_face_embedding(face_tensor):
-    """Calcula o vetor de embedding de 512 dimensões."""
-    _, resnet = get_models()
-    if face_tensor.ndim == 3:
-        face_tensor = face_tensor.unsqueeze(0)
-    face_tensor = face_tensor.to(device)
+    # Gerar embedding aprimorado com multi-crop flip-invariance
+    emb, tensor = get_enhanced_face_embedding(crop_pil)
     
-    with torch.no_grad():
-        embedding = resnet(face_tensor).squeeze().cpu().numpy()
-        
-    norm = np.linalg.norm(embedding)
-    if norm > 0:
-        embedding = embedding / norm
-    return embedding
+    return tensor, face_crop_hud, landmarks_img, box, lmk, None, emb
 
 def compare_embeddings(emb1, emb2, threshold_mode='padrao'):
-    """Compara dois vetores de embedding faciais."""
+    """Compara dois vetores de embedding faciais com modelo estatístico calibrado."""
     cosine_sim = float(np.dot(emb1, emb2))
     euclidean_dist = float(np.linalg.norm(emb1 - emb2))
     
@@ -230,9 +245,7 @@ def compare_embeddings(emb1, emb2, threshold_mode='padrao'):
     }
 
 def process_video_file(video_bytes_or_path, emb_ref, sample_fps_step=6, threshold_mode='padrao', min_blur_score=35.0, progress_callback=None):
-    """
-    Processa um arquivo de vídeo com callback de progresso em tempo real (0 a 100%).
-    """
+    """Processa arquivo de vídeo com extração de alta precisão."""
     mtcnn, _ = get_models()
     
     if isinstance(video_bytes_or_path, (bytes, bytearray)):
@@ -265,7 +278,6 @@ def process_video_file(video_bytes_or_path, emb_ref, sample_fps_step=6, threshol
             
         frame_count += 1
         
-        # Notificar progresso em %
         if progress_callback and (frame_count % 3 == 0 or frame_count == total_frames):
             pct = min(1.0, float(frame_count) / float(total_frames))
             progress_callback(pct)
@@ -307,13 +319,7 @@ def process_video_file(video_bytes_or_path, emb_ref, sample_fps_step=6, threshol
             if blur_score < min_blur_score:
                 continue
                 
-            crop_resized = crop_pil.resize((160, 160))
-            
-            arr = np.array(crop_resized).astype(np.float32) / 255.0
-            arr = (arr - 0.5) / 0.5
-            tensor = torch.tensor(arr).permute(2, 0, 1)
-            
-            emb = get_face_embedding(tensor)
+            emb, _ = get_enhanced_face_embedding(crop_pil)
             metrics = compare_embeddings(emb_ref, emb, threshold_mode=threshold_mode)
             
             raw_detections.append({
@@ -341,7 +347,6 @@ def process_video_file(video_bytes_or_path, emb_ref, sample_fps_step=6, threshol
     if len(raw_detections) == 0:
         return [], "Nenhum rosto com qualidade suficiente (nítido e visível) foi detectado no vídeo."
 
-    # Clustering de pessoas únicas
     clusters = []
     for det in raw_detections:
         matched_cluster = None

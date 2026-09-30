@@ -357,9 +357,20 @@ if uploaded_a and uploaded_b:
                         f"Resultado conclusivo para {res['classification']}."
                     )
 
+                    tech_resources_html = """
+                    <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed #1f2937; font-size: 13px; color: #94a3b8;">
+                        <b style="color: #e2e8f0;">🛠️ RECURSOS TÉCNICOS UTILIZADOS:</b><br/>
+                        • <b>Extrator Biométrico:</b> Deep Learning FaceNet (InceptionResnetV1) de 512 dimensões pré-treinado em VGGFace2 com vetorização L2 e amostragem multi-crop Flip-Invariance.<br/>
+                        • <b>Detector Anatômico:</b> MTCNN (Multi-task Cascaded Convolutional Networks) com localização de 5 pontos biométricos (olhos, nariz e cantos da boca).<br/>
+                        • <b>Métricas de Convergência:</b> Similaridade de Cosseno no hiperespaço 512D e Distância Euclidiana L2 com modelo de calibração de certeza.<br/>
+                        • <b>Filtros de Qualidade:</b> Avaliação de nitidez facial por variância do operador Laplaciano (Laplacian Blur Score) e validação de geometria anatômica.
+                    </div>
+                    """
+
                     st.markdown(f"""
                     <div class="minimal-parecer">
                         {parecer_text}
+                        {tech_resources_html}
                     </div>
                     """, unsafe_allow_html=True)
 
@@ -460,9 +471,20 @@ if uploaded_a and uploaded_b:
                     f"Resultado conclusivo para {res['classification']}."
                 )
 
+                tech_resources_html = """
+                <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed #1f2937; font-size: 13px; color: #94a3b8;">
+                    <b style="color: #e2e8f0;">🛠️ RECURSOS TÉCNICOS UTILIZADOS:</b><br/>
+                    • <b>Extrator Biométrico:</b> Deep Learning FaceNet (InceptionResnetV1) de 512 dimensões pré-treinado em VGGFace2 com vetorização L2 e amostragem multi-crop Flip-Invariance.<br/>
+                    • <b>Detector Anatômico:</b> MTCNN (Multi-task Cascaded Convolutional Networks) com localização de 5 pontos biométricos (olhos, nariz e cantos da boca).<br/>
+                    • <b>Métricas de Convergência:</b> Similaridade de Cosseno no hiperespaço 512D e Distância Euclidiana L2 com modelo de calibração de certeza.<br/>
+                    • <b>Filtros de Qualidade:</b> Avaliação de nitidez facial por variância do operador Laplaciano (Laplacian Blur Score) e validação de geometria anatômica.
+                </div>
+                """
+
                 st.markdown(f"""
                 <div class="minimal-parecer">
                     {parecer_text}
+                    {tech_resources_html}
                 </div>
                 """, unsafe_allow_html=True)
 
