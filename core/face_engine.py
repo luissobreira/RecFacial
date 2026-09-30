@@ -206,7 +206,7 @@ def process_face_image(img_pil, label="SUBJECT", is_match=True):
     # Gerar embedding aprimorado com multi-crop flip-invariance
     emb, tensor = get_enhanced_face_embedding(crop_pil)
     
-    return tensor, face_crop_hud, landmarks_img, box, lmk, None, emb
+    return tensor, face_crop_hud, landmarks_img, box, lmk, None
 
 def compare_embeddings(emb1, emb2, threshold_mode='padrao'):
     """Compara dois vetores de embedding faciais com modelo estatístico calibrado."""
