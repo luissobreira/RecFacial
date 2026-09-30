@@ -136,14 +136,17 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-# Top Bar com Botão de Reset
+APP_VERSION = "v3.2.0"
+
+# Top Bar com Botão de Reset e Badge de Versão
 col_head1, col_head2 = st.columns([3, 1])
 
 with col_head1:
-    st.markdown("""
+    st.markdown(f"""
     <div style="padding-top: 4px;">
-        <div style="font-size: 20px; font-weight: 700; color: #f8fafc; letter-spacing: -0.5px;">
+        <div style="font-size: 20px; font-weight: 700; color: #f8fafc; letter-spacing: -0.5px; display: flex; align-items: center; gap: 10px; flex-wrap: wrap;">
             🛡️ Comparador Facial Biométrico
+            <span style="font-size: 11px; background-color: #0f172a; color: #38bdf8; border: 1px solid #0284c7; padding: 2px 9px; border-radius: 12px; font-weight: 700; letter-spacing: 0.5px;">{APP_VERSION}</span>
         </div>
         <div style="font-size: 12px; color: #64748b; margin-top: 2px;">
             Confronto biométrico automatizado por IA com varredura de vídeos de CFTV e fotos
@@ -161,6 +164,7 @@ st.markdown("---")
 # Sidebar Opcional para Ajustes Avançados
 with st.sidebar:
     st.title("🎛️ Configurações")
+    st.caption(f"Versão do Sistema: **{APP_VERSION}**")
     threshold_mode = st.selectbox(
         "Limiar de Rigor:",
         options=['rigoroso', 'padrao', 'permissivo'],
@@ -174,17 +178,46 @@ with st.sidebar:
     sample_rate = st.slider("Amostragem de Frames em Vídeo:", 2, 15, 6, help="Processa 1 frame a cada N frames do vídeo.")
     min_blur = st.slider("Filtro Anti-Desfoque (Nitidez Mínima):", 10, 100, 35, help="Filtra e ignora rostos desfocados no vídeo.")
 
-# Seção de Upload
+# Seção de Upload com Ícones de Mídia Enviada
 key_suffix = st.session_state['uploader_key']
 col_u1, col_u2 = st.columns(2)
 
 with col_u1:
     st.markdown("<div style='font-size: 13px; font-weight: 600; color: #94a3b8; margin-bottom: 6px;'>FOTO A (Referência Oficial / Suspeito)</div>", unsafe_allow_html=True)
     uploaded_a = st.file_uploader("Upload da Foto A", type=['jpg', 'jpeg', 'png', 'webp', 'bmp'], key=f"img_a_{key_suffix}", label_visibility="collapsed")
+    
+    if uploaded_a is not None:
+        try:
+            img_preview_a = Image.open(uploaded_a)
+            size_mb = uploaded_a.size / (1024 * 1024)
+            col_icon_a1, col_icon_a2 = st.columns([1, 4])
+            with col_icon_a1:
+                st.image(img_preview_a, width=54)
+            with col_icon_a2:
+                st.markdown(f"<div style='font-size: 11px; color: #10b981; font-weight: 600; margin-top: 8px;'>📷 Foto A Carregada</div><div style='font-size: 11px; color: #64748b;'>{uploaded_a.name} ({size_mb:.1f} MB)</div>", unsafe_allow_html=True)
+        except Exception:
+            pass
 
 with col_u2:
     st.markdown("<div style='font-size: 13px; font-weight: 600; color: #94a3b8; margin-bottom: 6px;'>MÍDIA B (Questionada: Foto ou Vídeo de CFTV)</div>", unsafe_allow_html=True)
     uploaded_b = st.file_uploader("Upload da Mídia B (Foto ou Vídeo)", type=['jpg', 'jpeg', 'png', 'webp', 'bmp', 'mp4', 'avi', 'mov', 'mkv'], key=f"media_b_{key_suffix}", label_visibility="collapsed")
+    
+    if uploaded_b is not None:
+        size_mb_b = uploaded_b.size / (1024 * 1024)
+        is_vid_b = uploaded_b.name.split('.')[-1].lower() in ['mp4', 'avi', 'mov', 'mkv', 'webm']
+        
+        if is_vid_b:
+            st.markdown(f"<div style='font-size: 11px; color: #38bdf8; font-weight: 600; margin-top: 8px;'>🎥 Vídeo B de CFTV Carregado</div><div style='font-size: 11px; color: #64748b;'>{uploaded_b.name} ({size_mb_b:.1f} MB)</div>", unsafe_allow_html=True)
+        else:
+            try:
+                img_preview_b = Image.open(uploaded_b)
+                col_icon_b1, col_icon_b2 = st.columns([1, 4])
+                with col_icon_b1:
+                    st.image(img_preview_b, width=54)
+                with col_icon_b2:
+                    st.markdown(f"<div style='font-size: 11px; color: #10b981; font-weight: 600; margin-top: 8px;'>📷 Foto B Carregada</div><div style='font-size: 11px; color: #64748b;'>{uploaded_b.name} ({size_mb_b:.1f} MB)</div>", unsafe_allow_html=True)
+            except Exception:
+                pass
 
 if uploaded_a and uploaded_b:
     img_a = Image.open(uploaded_a)
