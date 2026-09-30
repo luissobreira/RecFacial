@@ -15,10 +15,12 @@ def generate_pdf_report(
     procedure_id="CONFRONTO-BIOMÉTRICO", 
     expert_name="Analista Biométrico", 
     notes="",
-    video_persons=None
+    video_persons=None,
+    matched_pairs=None
 ):
     """
     Gera o relatório PDF com parecer pericial e a seção final 'RECURSOS TÉCNICOS UTILIZADOS'.
+    Suporta confrontos 1x1, vídeos de CFTV e fotos estáticas multi-faciais (N x M).
     """
     pdf_buffer = io.BytesIO()
     doc = SimpleDocTemplate(
@@ -85,7 +87,13 @@ def generate_pdf_report(
     story = []
 
     # Cabeçalho Principal
-    report_title = "RELATÓRIO DE CONFRONTO FACIAL BIOMÉTRICO (VÍDEO DE CFTV)" if video_persons is not None else "RELATÓRIO DE CONFRONTO FACIAL BIOMÉTRICO"
+    if video_persons is not None:
+        report_title = "RELATÓRIO DE CONFRONTO FACIAL BIOMÉTRICO (VÍDEO DE CFTV)"
+    elif matched_pairs is not None:
+        report_title = "RELATÓRIO DE CONFRONTO FACIAL MULTI-AMBO (FOTOS ESTÁTICAS)"
+    else:
+        report_title = "RELATÓRIO DE CONFRONTO FACIAL BIOMÉTRICO"
+
     story.append(Paragraph(report_title, title_style))
     story.append(Spacer(1, 6))
     story.append(HRFlowable(width="100%", thickness=1.5, color=colors.HexColor('#1a252f'), spaceAfter=10))
@@ -102,6 +110,8 @@ def generate_pdf_report(
     
     if video_persons is not None:
         meta_data.append([Paragraph("<b>Origem da Mídia B:</b>", body_style), Paragraph(f"Vídeo de Câmera (CFTV) - <b>{len(video_persons)} indivíduos analisados</b>", body_style)])
+    elif matched_pairs is not None:
+        meta_data.append([Paragraph("<b>Tipo de Análise:</b>", body_style), Paragraph(f"Varredura Multi-Facial Matricial (N x M) - <b>{len(matched_pairs)} par(es) compatível(is)</b>", body_style)])
 
     t_meta = Table(meta_data, colWidths=[180, 360])
     t_meta.setStyle(TableStyle([
@@ -170,6 +180,48 @@ def generate_pdf_report(
                 story.append(Spacer(1, 6))
         else:
             no_match_box = Table([[Paragraph("⚠️ NENHUM ROSTO COMPATÍVEL ENCONTRADO NO VÍDEO.", alert_style)]], colWidths=[540])
+            no_match_box.setStyle(TableStyle([
+                ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#fff5f5')),
+                ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#feb2b2')),
+                ('TOPPADDING', (0, 0), (-1, -1), 12),
+                ('BOTTOMPADDING', (0, 0), (-1, -1), 12),
+            ]))
+            story.append(no_match_box)
+            story.append(Spacer(1, 10))
+
+    elif matched_pairs is not None:
+        if len(matched_pairs) > 0:
+            for idx, pair in enumerate(matched_pairs, 1):
+                fa, fb = pair['face_a'], pair['face_b']
+                m = pair['metrics']
+                
+                img_fa_rl = pil_to_rl_image(fa['crop_hud'], 105, 105)
+                img_fb_rl = pil_to_rl_image(fb['crop_hud'], 105, 105)
+                
+                p_status = f"<font color='{m['color']}'><b>{m['classification']}</b></font>"
+                p_info = Paragraph(
+                    f"<b>PAR #{idx}: {fa['label']} (Foto A) ↔ {fb['label']} (Foto B)</b><br/>"
+                    f"Similaridade de Cosseno: <b>{m['cosine_sim']:.4f}</b> | Distância L2: <b>{m['euclidean_dist']:.4f}</b><br/>"
+                    f"Grau de Certeza Estimado: <b><font color='{m['color']}'>{m['certainty_pct']:.1f}%</font></b><br/>"
+                    f"Resultado: {p_status}<br/>"
+                    f"<font size=8 color='#4a5568'>{m['reason']}</font>",
+                    body_style
+                )
+                
+                pair_table = Table([[img_fa_rl, img_fb_rl, p_info]], colWidths=[115, 115, 310])
+                pair_table.setStyle(TableStyle([
+                    ('VALIGN', (0, 0), (-1, -1), 'MIDDLE'),
+                    ('ALIGN', (0, 0), (1, -1), 'CENTER'),
+                    ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#ffffff')),
+                    ('BOX', (0, 0), (-1, -1), 0.5, colors.HexColor('#cbd5e0')),
+                    ('INNERGRID', (0, 0), (-1, -1), 0.5, colors.HexColor('#e2e8f0')),
+                    ('TOPPADDING', (0, 0), (-1, -1), 4),
+                    ('BOTTOMPADDING', (0, 0), (-1, -1), 4),
+                ]))
+                story.append(pair_table)
+                story.append(Spacer(1, 6))
+        else:
+            no_match_box = Table([[Paragraph("⚠️ NENHUM ROSTO COMPATÍVEL ENCONTRADO ENTRE AS DUAS FOTOS.", alert_style)]], colWidths=[540])
             no_match_box.setStyle(TableStyle([
                 ('BACKGROUND', (0, 0), (-1, -1), colors.HexColor('#fff5f5')),
                 ('BOX', (0, 0), (-1, -1), 1, colors.HexColor('#feb2b2')),

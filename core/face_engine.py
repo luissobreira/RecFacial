@@ -265,6 +265,106 @@ def compare_embeddings(emb1, emb2, threshold_mode='padrao'):
         'reason': reason
     }
 
+def process_all_faces(img_pil, label_prefix="ROSTO"):
+    """
+    Detecta TODOS os rostos em uma imagem estática (Foto A ou Foto B) e retorna lista com recortes, HUDs e embeddings.
+    """
+    mtcnn, _ = get_models()
+    if img_pil.mode != 'RGB':
+        img_pil = img_pil.convert('RGB')
+        
+    boxes, probs, landmarks = mtcnn.detect(img_pil, landmarks=True)
+    if boxes is None or len(boxes) == 0:
+        return [], "Nenhum rosto detectado na imagem."
+        
+    w_img, h_img = img_pil.size
+    detected_faces = []
+    
+    for idx, box in enumerate(boxes, 1):
+        if probs[idx-1] is None or probs[idx-1] < 0.50:
+            continue
+            
+        box_int = box.astype(int)
+        lmk_int = landmarks[idx-1]
+        
+        x1, y1, x2, y2 = max(0, box_int[0]), max(0, box_int[1]), min(w_img, box_int[2]), min(h_img, box_int[3])
+        bw, bh = x2 - x1, y2 - y1
+        if bw < 16 or bh < 16:
+            continue
+            
+        pad_x, pad_y = int(bw * 0.12), int(bh * 0.12)
+        crop_box = (max(0, x1 - pad_x), max(0, y1 - pad_y), min(w_img, x2 + pad_x), min(h_img, y2 + pad_y))
+        crop_pil = img_pil.crop(crop_box).resize((160, 160))
+        
+        crop_base = img_pil.crop(crop_box).resize((350, 350))
+        scale_x = 350.0 / (crop_box[2] - crop_box[0])
+        scale_y = 350.0 / (crop_box[3] - crop_box[1])
+        
+        box_rel = np.array([
+            (box_int[0] - crop_box[0]) * scale_x,
+            (box_int[1] - crop_box[1]) * scale_y,
+            (box_int[2] - crop_box[0]) * scale_x,
+            (box_int[3] - crop_box[1]) * scale_y
+        ])
+        lmk_rel = np.zeros_like(lmk_int)
+        for i in range(len(lmk_int)):
+            lmk_rel[i][0] = (lmk_int[i][0] - crop_box[0]) * scale_x
+            lmk_rel[i][1] = (lmk_int[i][1] - crop_box[1]) * scale_y
+            
+        face_crop_hud = draw_futuristic_hud(crop_base, box_rel, lmk_rel, label=f"{label_prefix}_{idx}", is_match=True)
+        emb, tensor = get_enhanced_face_embedding(crop_pil)
+        
+        detected_faces.append({
+            'face_index': idx,
+            'label': f"{label_prefix} #{idx}",
+            'crop_hud': face_crop_hud,
+            'crop_pil': crop_pil,
+            'embedding': emb,
+            'box': box_int,
+            'lmk': lmk_int,
+            'prob': probs[idx-1]
+        })
+        
+    if len(detected_faces) == 0:
+        return [], "Nenhum rosto qualificado detectado."
+        
+    return detected_faces, None
+
+def cross_compare_faces(faces_a, faces_b, threshold_mode='padrao'):
+    """
+    Realiza confronto matricial (N x M) entre todos os rostos da Foto A e todos os rostos da Foto B.
+    Retorna pares compatíveis ordenados por índice de convergência.
+    """
+    all_pairs = []
+    for fa in faces_a:
+        for fb in faces_b:
+            metrics = compare_embeddings(fa['embedding'], fb['embedding'], threshold_mode=threshold_mode)
+            all_pairs.append({
+                'face_a': fa,
+                'face_b': fb,
+                'metrics': metrics
+            })
+            
+    all_pairs.sort(key=lambda p: p['metrics']['cosine_sim'], reverse=True)
+    
+    matched_pairs = []
+    used_a = set()
+    used_b = set()
+    
+    for p in all_pairs:
+        idx_a = p['face_a']['face_index']
+        idx_b = p['face_b']['face_index']
+        sim = p['metrics']['cosine_sim']
+        status = p['metrics']['status_code']
+        
+        if (status in ['MATCH', 'INCONCLUSIVE'] or sim >= 0.45):
+            if idx_a not in used_a and idx_b not in used_b:
+                used_a.add(idx_a)
+                used_b.add(idx_b)
+                matched_pairs.append(p)
+                
+    return matched_pairs, all_pairs
+
 def process_video_file(video_bytes_or_path, emb_ref, sample_fps_step=2, threshold_mode='padrao', min_blur_score=5.0, progress_callback=None):
     """
     Processa arquivo de vídeo com sensibilidade calibrada para evitar falsos negativos:

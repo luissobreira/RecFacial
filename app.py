@@ -7,6 +7,8 @@ import os
 
 from core.face_engine import (
     process_face_image, 
+    process_all_faces,
+    cross_compare_faces,
     get_face_embedding, 
     compare_embeddings, 
     process_video_file
@@ -136,7 +138,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-APP_VERSION = "v3.4.0"
+APP_VERSION = "v3.5.0"
 
 # Top Bar com Botão de Reset e Badge de Versão
 col_head1, col_head2 = st.columns([3, 1])
@@ -428,116 +430,180 @@ if uploaded_a and uploaded_b:
 
         else:
             # -------------------------------------------------------------
-            # PROCESSAMENTO DE IMAGEM ESTÁTICA 1 X 1
+            # PROCESSAMENTO DE IMAGEM ESTÁTICA MULTI-FACIAL (N x M)
             # -------------------------------------------------------------
             img_b = Image.open(uploaded_b)
-            with st.spinner("Analisando feições faciais da Foto B..."):
-                tensor_b, crop_b_hud, _, box_b, lmk_b, err_b = process_face_image(img_b, label="QUESTIONADO_B", is_match=True)
+            with st.spinner("Detectando feições e rostos em ambas as fotos..."):
+                faces_a, err_a = process_all_faces(img_a, label_prefix="FOTO_A")
+                faces_b, err_b = process_all_faces(img_b, label_prefix="FOTO_B")
                 
-            if err_b:
-                st.error(f"Foto B: {err_b}")
+            if err_a:
+                st.error(f"Erro na Foto A: {err_a}")
+            elif err_b:
+                st.error(f"Erro na Foto B: {err_b}")
             else:
-                emb_b = get_face_embedding(tensor_b)
-                res = compare_embeddings(emb_a, emb_b, threshold_mode=threshold_mode)
+                matched_pairs, all_pairs = cross_compare_faces(faces_a, faces_b, threshold_mode=threshold_mode)
                 
-                is_match = (res['status_code'] == 'MATCH')
+                st.markdown(f"<div style='font-size: 13px; color: #94a3b8; margin-top: 6px;'>Varredura concluída: <b>{len(faces_a)} rosto(s)</b> na Foto A e <b>{len(faces_b)} rosto(s)</b> na Foto B.</div>", unsafe_allow_html=True)
                 
-                _, crop_a_hud, _, _, _, _ = process_face_image(img_a, label="FOTO_A", is_match=is_match)
-                _, crop_b_hud, _, _, _, _ = process_face_image(img_b, label="FOTO_B", is_match=is_match)
-
-                # 1. REGISTRO FOTOGRÁFICO
-                st.markdown('<div class="clean-section-title">1. REGISTRO FOTOGRÁFICO E RECORTE BIOMÉTRICO</div>', unsafe_allow_html=True)
-                
-                col_r1, col_r2 = st.columns(2)
-                with col_r1:
-                    st.markdown('<div class="image-card-header">FOTO A (Referência / Suspeito)</div>', unsafe_allow_html=True)
-                    st.image(crop_a_hud, use_container_width=True)
+                if len(matched_pairs) == 0:
+                    st.warning("⚠️ NENHUM ROSTO COMPATÍVEL ENCONTRADO ENTRE AS DUAS FOTOS.")
                     
-                with col_r2:
-                    st.markdown('<div class="image-card-header">FOTO B (Questionada / CFTV)</div>', unsafe_allow_html=True)
-                    st.image(crop_b_hud, use_container_width=True)
-
-                # 2. ANÁLISE BIOMÉTRICA
-                st.markdown('<div class="clean-section-title">2. ANÁLISE BIOMÉTRICA E MÉTRICAS DE CONVERGÊNCIA</div>', unsafe_allow_html=True)
-                
-                color_hex = res['color']
-                certainty_str = f"{res['certainty_pct']:.1f}%"
-                status_html = f"<b style='color: {color_hex}; font-size: 15px;'>{res['classification']}</b>"
-                certainty_html = f"<b style='color: {color_hex}; font-size: 15px;'>{certainty_str}</b>"
-
-                table_html = f"""
-                <table class="minimal-table">
-                    <tr>
-                        <td class="col-label">Algoritmo Extrator:</td>
-                        <td>Deep FaceNet (InceptionResnetV1 512d - VGGFace2)</td>
-                    </tr>
-                    <tr>
-                        <td class="col-label">Similaridade de Cosseno:</td>
-                        <td><b>{res['cosine_sim']:.4f}</b></td>
-                    </tr>
-                    <tr>
-                        <td class="col-label">Distância Euclidiana (L2):</td>
-                        <td><b>{res['euclidean_dist']:.4f}</b></td>
-                    </tr>
-                    <tr>
-                        <td class="col-label">Grau de Certeza Estima:</td>
-                        <td>{certainty_html}</td>
-                    </tr>
-                    <tr>
-                        <td class="col-label">Resultado da Análise:</td>
-                        <td>{status_html}</td>
-                    </tr>
-                    <tr>
-                        <td class="col-label">Fundamentação:</td>
-                        <td>{res['reason']}</td>
-                    </tr>
-                </table>
-                """
-                st.markdown(table_html, unsafe_allow_html=True)
-
-                # 3. PARECER TÉCNICO
-                st.markdown('<div class="clean-section-title">3. PARECER TÉCNICO PERICIAL / OBSERVAÇÕES</div>', unsafe_allow_html=True)
-                
-                parecer_text = (
-                    f"Confronto facial realizado via algoritmo Deep FaceNet (InceptionResnetV1). "
-                    f"Constatada similaridade de cosseno de {res['cosine_sim']:.4f} com grau de certeza estimado em {res['certainty_pct']:.1f}%. "
-                    f"Resultado conclusivo para {res['classification']}."
-                )
-
-                tech_resources_html = """
-                <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed #1f2937; font-size: 13px; color: #94a3b8;">
-                    <b style="color: #e2e8f0;">🛠️ RECURSOS TÉCNICOS UTILIZADOS:</b><br/>
-                    • <b>Extrator Biométrico:</b> Deep Learning FaceNet (InceptionResnetV1) de 512 dimensões pré-treinado em VGGFace2 com vetorização L2 e amostragem multi-crop Flip-Invariance.<br/>
-                    • <b>Detector Anatômico:</b> MTCNN (Multi-task Cascaded Convolutional Networks) com localização de 5 pontos biométricos (olhos, nariz e cantos da boca).<br/>
-                    • <b>Métricas de Convergência:</b> Similaridade de Cosseno no hiperespaço 512D e Distância Euclidiana L2 com modelo de calibração de certeza.<br/>
-                    • <b>Filtros de Qualidade:</b> Avaliação de nitidez facial por variância do operador Laplaciano (Laplacian Blur Score) e validação de geometria anatômica.
-                </div>
-                """
-
-                st.markdown(f"""
-                <div class="minimal-parecer">
-                    {parecer_text}
-                    {tech_resources_html}
-                </div>
-                """, unsafe_allow_html=True)
-
-                # BOTÃO DE PDF (FOTO ESTÁTICA: SEMPRE GERA O RELATÓRIO INDEPENDENTE DO RESULTADO)
-                st.markdown("<br>", unsafe_allow_html=True)
-                col_pdf1, col_pdf2, col_pdf3 = st.columns([1, 2, 1])
-                with col_pdf2:
-                    pdf_bytes = generate_pdf_report(
-                        img_a, img_b, crop_a_hud, crop_b_hud, res, 
-                        procedure_id="CONFRONTO-BIOMÉTRICO", 
-                        expert_name="Analista Biométrico", 
-                        notes=parecer_text
+                    parecer_text = (
+                        f"Confronto facial matricial realizado entre a Foto A ({uploaded_a.name}) e a Foto B ({uploaded_b.name}). "
+                        f"Foram analisados {len(faces_a)} rosto(s) na Foto A e {len(faces_b)} rosto(s) na Foto B. "
+                        f"Nenhum par de rostos atingiu o limiar de convergência biométrica."
                     )
-                    st.download_button(
-                        label="📄 Baixar Relatório da Comparação (.PDF)",
-                        data=pdf_bytes,
-                        file_name=f"Relatorio_Confronto_Facial_{int(res['certainty_pct'])}pct.pdf",
-                        mime="application/pdf",
-                        use_container_width=True
+                    
+                    st.markdown('<div class="clean-section-title">3. PARECER TÉCNICO PERICIAL / OBSERVAÇÕES</div>', unsafe_allow_html=True)
+                    st.markdown(f"""
+                    <div class="minimal-parecer">
+                        {parecer_text}
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    col_pdf1, col_pdf2, col_pdf3 = st.columns([1, 2, 1])
+                    with col_pdf2:
+                        crop_a_hud = faces_a[0]['crop_hud'] if faces_a else None
+                        crop_b_hud = faces_b[0]['crop_hud'] if faces_b else None
+                        pdf_bytes = generate_pdf_report(
+                            img_a, img_b, crop_a_hud, crop_b_hud, 
+                            {'color': '#dc3545', 'classification': 'NENHUM COMPATÍVEL', 'cosine_sim': 0.0, 'euclidean_dist': 0.0, 'certainty_pct': 0.0, 'reason': 'Nenhum par compatível.'},
+                            procedure_id="CONFRONTO-FOTO-ESTATICA", 
+                            expert_name="Analista Biométrico", 
+                            notes=parecer_text,
+                            matched_pairs=[]
+                        )
+                        st.download_button(
+                            label="📄 Baixar Relatório da Comparação (.PDF)",
+                            data=pdf_bytes,
+                            file_name=f"Relatorio_Confronto_Facial_{uploaded_a.name.split('.')[0]}.pdf",
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
+                else:
+                    st.success(f"🔍 **{len(matched_pairs)} par(es) de rosto(s) compatível(is)** encontrado(s) entre as duas fotos!")
+                    
+                    # 1. REGISTRO FOTOGRÁFICO DOS PARES COMPATÍVEIS
+                    st.markdown('<div class="clean-section-title">1. REGISTRO FOTOGRÁFICO E RECORTE BIOMÉTRICO DOS PARES COMPATÍVEIS</div>', unsafe_allow_html=True)
+                    
+                    for idx, pair in enumerate(matched_pairs, 1):
+                        fa, fb = pair['face_a'], pair['face_b']
+                        m = pair['metrics']
+                        color_h = m['color']
+                        
+                        col_p1, col_p2, col_p3 = st.columns([1, 1, 1.5])
+                        with col_p1:
+                            st.markdown(f'<div class="image-card-header">FOTO A :: {fa["label"]}</div>', unsafe_allow_html=True)
+                            st.image(fa['crop_hud'], use_container_width=True)
+                        with col_p2:
+                            st.markdown(f'<div class="image-card-header">FOTO B :: {fb["label"]}</div>', unsafe_allow_html=True)
+                            st.image(fb['crop_hud'], use_container_width=True)
+                        with col_p3:
+                            st.markdown(f"""
+                            <div class="person-card" style="padding: 16px; text-align: left; height: 100%; display: flex; flex-direction: column; justify-content: center;">
+                                <div style="font-size: 13px; font-weight: 700; color: #f8fafc; margin-bottom: 6px;">PAR #{idx}: {fa['label']} ↔ {fb['label']}</div>
+                                <div style="font-size: 22px; font-weight: 800; color: {color_h};">{m['certainty_pct']:.1f}%</div>
+                                <div style="font-size: 12px; font-weight: 700; color: {color_h}; margin-bottom: 8px;">{m['classification']}</div>
+                                <div style="font-size: 11px; color: #cbd5e1;"><b>Cosseno:</b> {m['cosine_sim']:.4f} | <b>Euclidiana:</b> {m['euclidean_dist']:.4f}</div>
+                                <div style="font-size: 10px; color: #64748b; margin-top: 4px;">{m['reason']}</div>
+                            </div>
+                            """, unsafe_allow_html=True)
+                            
+                        st.markdown("<hr style='border-color: #1f2937; margin: 12px 0;'>", unsafe_allow_html=True)
+
+                    primary_pair = matched_pairs[0]
+                    res = primary_pair['metrics']
+                    
+                    # 2. ANÁLISE BIOMÉTRICA E MÉTRICAS
+                    st.markdown('<div class="clean-section-title">2. ANÁLISE BIOMÉTRICA E MÉTRICAS DE CONVERGÊNCIA</div>', unsafe_allow_html=True)
+                    
+                    color_hex = res['color']
+                    certainty_str = f"{res['certainty_pct']:.1f}%"
+                    status_html = f"<b style='color: {color_hex}; font-size: 15px;'>{res['classification']}</b>"
+                    certainty_html = f"<b style='color: {color_hex}; font-size: 15px;'>{certainty_str}</b>"
+
+                    table_html = f"""
+                    <table class="minimal-table">
+                        <tr>
+                            <td class="col-label">Par de Maior Convergência:</td>
+                            <td><b>{primary_pair['face_a']['label']}</b> (Foto A) ↔ <b>{primary_pair['face_b']['label']}</b> (Foto B)</td>
+                        </tr>
+                        <tr>
+                            <td class="col-label">Algoritmo Extrator:</td>
+                            <td>Deep FaceNet (InceptionResnetV1 512d - VGGFace2) com Multi-crop</td>
+                        </tr>
+                        <tr>
+                            <td class="col-label">Similaridade de Cosseno:</td>
+                            <td><b>{res['cosine_sim']:.4f}</b></td>
+                        </tr>
+                        <tr>
+                            <td class="col-label">Distância Euclidiana (L2):</td>
+                            <td><b>{res['euclidean_dist']:.4f}</b></td>
+                        </tr>
+                        <tr>
+                            <td class="col-label">Grau de Certeza Estima:</td>
+                            <td>{certainty_html}</td>
+                        </tr>
+                        <tr>
+                            <td class="col-label">Resultado da Análise:</td>
+                            <td>{status_html}</td>
+                        </tr>
+                        <tr>
+                            <td class="col-label">Fundamentação:</td>
+                            <td>{res['reason']}</td>
+                        </tr>
+                    </table>
+                    """
+                    st.markdown(table_html, unsafe_allow_html=True)
+
+                    # 3. PARECER TÉCNICO
+                    st.markdown('<div class="clean-section-title">3. PARECER TÉCNICO PERICIAL / OBSERVAÇÕES</div>', unsafe_allow_html=True)
+                    
+                    parecer_text = (
+                        f"Confronto facial matricial (N x M) realizado entre a Foto A ({uploaded_a.name}) e a Foto B ({uploaded_b.name}). "
+                        f"Foram identificados {len(matched_pairs)} par(es) de rosto(s) compatível(is). "
+                        f"O maior grau de convergência foi obtido entre {primary_pair['face_a']['label']} e {primary_pair['face_b']['label']} "
+                        f"com similaridade de cosseno de {res['cosine_sim']:.4f} ({res['certainty_pct']:.1f}% de certeza). "
+                        f"Resultado conclusivo para {res['classification']}."
                     )
+
+                    tech_resources_html = """
+                    <div style="margin-top: 14px; padding-top: 12px; border-top: 1px dashed #1f2937; font-size: 13px; color: #94a3b8;">
+                        <b style="color: #e2e8f0;">🛠️ RECURSOS TÉCNICOS UTILIZADOS:</b><br/>
+                        • <b>Extrator Biométrico:</b> Deep Learning FaceNet (InceptionResnetV1) de 512 dimensões pré-treinado em VGGFace2 com vetorização L2 e amostragem multi-crop Flip-Invariance.<br/>
+                        • <b>Detector Anatômico:</b> MTCNN (Multi-task Cascaded Convolutional Networks) com localização de 5 pontos biométricos (olhos, nariz e cantos da boca).<br/>
+                        • <b>Métricas de Convergência:</b> Similaridade de Cosseno no hiperespaço 512D e Distância Euclidiana L2 com modelo de calibração de certeza.<br/>
+                        • <b>Filtros de Qualidade:</b> Avaliação de nitidez facial por variância do operador Laplaciano (Laplacian Blur Score) e validação de geometria anatômica.
+                    </div>
+                    """
+
+                    st.markdown(f"""
+                    <div class="minimal-parecer">
+                        {parecer_text}
+                        {tech_resources_html}
+                    </div>
+                    """, unsafe_allow_html=True)
+
+                    # BOTÃO DE PDF
+                    st.markdown("<br>", unsafe_allow_html=True)
+                    col_pdf1, col_pdf2, col_pdf3 = st.columns([1, 2, 1])
+                    with col_pdf2:
+                        pdf_bytes = generate_pdf_report(
+                            img_a, img_b, primary_pair['face_a']['crop_hud'], primary_pair['face_b']['crop_hud'], res, 
+                            procedure_id="CONFRONTO-MULTI-FACIAL", 
+                            expert_name="Analista Biométrico", 
+                            notes=parecer_text,
+                            matched_pairs=matched_pairs
+                        )
+                        st.download_button(
+                            label="📄 Baixar Relatório da Comparação (.PDF)",
+                            data=pdf_bytes,
+                            file_name=f"Relatorio_Confronto_Facial_{int(res['certainty_pct'])}pct.pdf",
+                            mime="application/pdf",
+                            use_container_width=True
+                        )
 
 else:
     st.markdown("""
