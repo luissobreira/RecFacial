@@ -138,7 +138,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-APP_VERSION = "v3.5.1"
+APP_VERSION = "v3.6.0"
 
 # Top Bar com Botão de Reset e Badge de Versão
 col_head1, col_head2 = st.columns([3, 1])
