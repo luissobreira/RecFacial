@@ -143,6 +143,24 @@ def get_enhanced_face_embedding(crop_pil):
         combined_emb = combined_emb / norm
     return combined_emb, tensor_orig.squeeze(0)
 
+def get_face_embedding(face_tensor_or_crop):
+    """Calcula o vetor de embedding de 512 dimensões para um tensor ou PIL Image."""
+    if isinstance(face_tensor_or_crop, torch.Tensor):
+        _, resnet = get_models()
+        tensor = face_tensor_or_crop
+        if tensor.ndim == 3:
+            tensor = tensor.unsqueeze(0)
+        tensor = tensor.to(device)
+        with torch.no_grad():
+            emb = resnet(tensor).squeeze().cpu().numpy()
+        norm = np.linalg.norm(emb)
+        if norm > 0:
+            emb = emb / norm
+        return emb
+    else:
+        emb, _ = get_enhanced_face_embedding(face_tensor_or_crop)
+        return emb
+
 def process_face_image(img_pil, label="SUBJECT", is_match=True):
     """Detecta rosto, extrai landmarks e alinha uma imagem estática."""
     mtcnn, _ = get_models()
