@@ -177,7 +177,13 @@ with st.sidebar:
         }[x],
         index=1
     )
-    sample_rate = st.slider("Modo de Varredura de Vídeo:", 0, 10, 0, format_func=lambda x: "⚡ Ultra-Rápido (Keyframes)" if x == 0 else f"Frame a Frame (1/{x})", help="O modo Ultra-Rápido (0) analisa o vídeo em milissegundos usando busca C++ de keyframes e inferência PyTorch em lote.")
+    sample_rate = st.select_slider(
+        "Modo de Varredura de Vídeo:", 
+        options=list(range(0, 11)), 
+        value=0, 
+        format_func=lambda x: "⚡ Ultra-Rápido (Keyframes)" if x == 0 else f"Frame a Frame (1/{x})", 
+        help="O modo Ultra-Rápido (0) analisa o vídeo em milissegundos usando busca C++ de keyframes e inferência PyTorch em lote."
+    )
     min_blur = st.slider("Filtro Anti-Desfoque (Nitidez Mínima):", 1, 50, 8, help="Filtra e ignora rostos desfocados no vídeo.")
 
 # Seção de Upload com Ícones de Mídia Enviada
