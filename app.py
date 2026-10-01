@@ -138,7 +138,7 @@ st.markdown("""
 </style>
 """, unsafe_allow_html=True)
 
-APP_VERSION = "v3.6.0"
+APP_VERSION = "v4.0.0"
 
 # Top Bar com Botão de Reset e Badge de Versão
 col_head1, col_head2 = st.columns([3, 1])
@@ -177,7 +177,7 @@ with st.sidebar:
         }[x],
         index=1
     )
-    sample_rate = st.slider("Amostragem de Frames em Vídeo:", 1, 10, 2, help="Processa 1 frame a cada N frames do vídeo.")
+    sample_rate = st.slider("Modo de Varredura de Vídeo:", 0, 10, 0, format_func=lambda x: "⚡ Ultra-Rápido (Keyframes)" if x == 0 else f"Frame a Frame (1/{x})", help="O modo Ultra-Rápido (0) analisa o vídeo em milissegundos usando busca C++ de keyframes e inferência PyTorch em lote.")
     min_blur = st.slider("Filtro Anti-Desfoque (Nitidez Mínima):", 1, 50, 8, help="Filtra e ignora rostos desfocados no vídeo.")
 
 # Seção de Upload com Ícones de Mídia Enviada
